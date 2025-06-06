@@ -14,10 +14,29 @@ let gamePaused = false;
 document.addEventListener("keydown", e => keys[e.code] = true);
 document.addEventListener("keyup", e => keys[e.code] = false);
 
-const playerImg = new Image();
+const playerImg = new Image(); // sprite sheet for the player
+const enemyWalkImg = new Image(); // sprite sheet for the enemy
+const enemyImg = new Image(); enemyImg.src = "assets/alien_enemy.png"; // fallback image
+const bulletImg = new Image(); bulletImg.src = "assets/bullet.png";
+
+let enemyFrameWidth = 40;
+let enemyFrameHeight = 60;
+const enemyFrameCount = 4;
+const enemyScale = 0.25;
+
+let assetsToLoad = 2;
+function assetLoaded() {
+  assetsToLoad--;
+  if (assetsToLoad === 0) gameLoop();
+}
+
 playerImg.onload = () => {
-  console.log('Player image loaded successfully');
-  console.log('Image dimensions:', playerImg.width, 'x', playerImg.height);
+  player.frameWidth = playerImg.width / player.frameCount;
+  player.frameHeight = playerImg.height;
+  player.w = player.frameWidth * player.scale;
+  player.h = player.frameHeight * player.scale;
+  console.log('Player sprite loaded:', playerImg.width, 'x', playerImg.height);
+  assetLoaded();
 };
 playerImg.onerror = (e) => {
   console.error('Failed to load player sprite:', e);
@@ -37,11 +56,19 @@ playerImg.onerror = (e) => {
   
   playerImg.src = tempCanvas.toDataURL();
 };
-console.log('Attempting to load player sprite from:', "assets/player.png");
-playerImg.src = "assets/player.png";
+console.log('Attempting to load player sprite from:', "assets/player_walk_sheet.png");
+playerImg.src = "assets/player_walk_sheet.png";
 
-const enemyImg = new Image(); enemyImg.src = "assets/alien_enemy.png";
-const bulletImg = new Image(); bulletImg.src = "assets/bullet.png";
+enemyWalkImg.onload = () => {
+  enemyFrameWidth = enemyWalkImg.width / enemyFrameCount;
+  enemyFrameHeight = enemyWalkImg.height;
+  enemies.forEach(e => {
+    e.w = enemyFrameWidth * enemyScale;
+    e.h = enemyFrameHeight * enemyScale;
+  });
+  assetLoaded();
+};
+enemyWalkImg.src = "enemy_walk_sheet.png";
 
 // Sound effects
 const sounds = {
@@ -67,8 +94,11 @@ class Player {
   constructor() {
     this.x = 100;
     this.y = 400;
-    this.w = 6; // 24/4 = 6
-    this.h = 8; // 32/4 = 8
+    this.frameWidth = 24;
+    this.frameHeight = 32;
+    this.scale = 0.25;
+    this.w = this.frameWidth * this.scale;
+    this.h = this.frameHeight * this.scale;
     this.vx = 0;
     this.vy = 0;
     this.onGround = false;
@@ -157,16 +187,16 @@ class Player {
 
     // Debug: Draw the entire sprite sheet first (scaled down to 25%)
     const spriteSheetScale = 0.25; // Scale down to 25%
-    ctx.drawImage(playerImg, 0, 0, playerImg.width, playerImg.height, 
-                 10, 10, 
-                 playerImg.width * spriteSheetScale, 
+    ctx.drawImage(playerImg, 0, 0, playerImg.width, playerImg.height,
+                 10, 10,
+                 playerImg.width * spriteSheetScale,
                  playerImg.height * spriteSheetScale);
 
     // Draw the player character
-    const frameWidth = this.w;
-    const frameHeight = this.h;
+    const frameWidth = this.frameWidth;
+    const frameHeight = this.frameHeight;
     const sourceX = this.currentFrame * frameWidth;
-    const sourceY = 0; // Start with just the first row for now
+    const sourceY = 0; // first row
 
     ctx.save();
     if (!this.facingRight) {
@@ -199,8 +229,11 @@ class Enemy {
   constructor(x, y) {
     this.x = x;
     this.y = y;
-    this.w = 40;
-    this.h = 60;
+    this.currentFrame = 0;
+    this.frameDelay = 150;
+    this.lastFrameUpdate = 0;
+    this.w = enemyFrameWidth * enemyScale;
+    this.h = enemyFrameHeight * enemyScale;
     this.vx = 1.5;
     this.health = 3;
   }
@@ -208,10 +241,23 @@ class Enemy {
   update() {
     this.x += this.vx;
     if (this.x <= 0 || this.x + this.w >= 2000) this.vx *= -1;
+
+    const now = Date.now();
+    if (now - this.lastFrameUpdate > this.frameDelay) {
+      this.currentFrame = (this.currentFrame + 1) % enemyFrameCount;
+      this.lastFrameUpdate = now;
+    }
   }
 
   draw() {
-    ctx.drawImage(enemyImg, this.x - cameraX, this.y, this.w, this.h);
+    if (enemyWalkImg.complete) {
+      const sx = this.currentFrame * enemyFrameWidth;
+      const sy = 0;
+      ctx.drawImage(enemyWalkImg, sx, sy, enemyFrameWidth, enemyFrameHeight,
+                    this.x - cameraX, this.y, this.w, this.h);
+    } else {
+      ctx.drawImage(enemyImg, this.x - cameraX, this.y, this.w, this.h);
+    }
   }
 }
 
@@ -256,6 +302,3 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
-playerImg.onload = () => {
-  gameLoop();
-};
